@@ -5,12 +5,16 @@ const crypto = require("crypto");
 
 const YtDlpWrap = require("yt-dlp-wrap").default;
 const binary = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
-const ytDlpPath = path.join(__dirname, "yt-dlp", binary);
+const ytDlpPath = path.join(process.cwd(), "yt-dlp", binary);
 const ytdlp = new YtDlpWrap(ytDlpPath);
 
 // ============================
 //          UTILS
 // ============================
+
+if (!fs.existsSync(ytDlpPath)) {
+  throw new Error(`yt-dlp binary not found at ${ytDlpPath}. Please download it from https://github.com/yt-dlp/yt-dlp and place it in ./yt-dlp/`);
+}
 
 function sanitizeFilename(name) {
   return name.replace(/[<>:"/\\|?*\x00-\x1F]/g, "").substring(0, 100);

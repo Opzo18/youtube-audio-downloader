@@ -1,4 +1,4 @@
-# youtube-audio-downloader
+# youtube-audio-utils
 
 A lightweight utility library for searching and downloading YouTube audio using [`yt-dlp`](https://github.com/yt-dlp/yt-dlp). Includes built-in file caching, queue handling per guild (ideal for bots), and support for cleaning downloaded tracks.
 
@@ -7,23 +7,33 @@ A lightweight utility library for searching and downloading YouTube audio using 
 ## 📦 Installation
 
 ```bash
-npm install youtube-audio-downloader
+npm install youtube-audio-utils
 ```
 
-### ⚠️ yt-dlp binary required
+---
 
-You must place the `yt-dlp` binary in a `yt-dlp/` folder inside your project root:
+## ⚠️ yt-dlp binary required
 
-- **Windows**: [yt-dlp.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe)
-- **Linux/macOS**: [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp)
+This package requires the [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) binary.
 
-Directory structure:
+You must **download the yt-dlp binary** and place it in a folder called `yt-dlp` at the **root of your project** (not inside `node_modules`).
+
+### Windows
+[Download yt-dlp.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe)
+
+### Linux/macOS
+[Download yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp)
+
+**Project structure:**
 
 ```
 your-project/
 ├── yt-dlp/
 │   └── yt-dlp or yt-dlp.exe
+├── index.js
 ```
+
+If the binary is not found, an error will be thrown with instructions.
 
 ---
 
@@ -32,7 +42,7 @@ your-project/
 Searches YouTube and returns the first video result.
 
 ```js
-const { searchYouTube } = require("youtube-audio-downloader");
+const { searchYouTube } = require("youtube-audio-utils");
 
 const result = await searchYouTube("Never Gonna Give You Up");
 console.log(result);
@@ -55,9 +65,13 @@ console.log(result);
 Downloads the audio (MP3) of a YouTube video to the `music/` directory. Returns the path to the downloaded file.
 
 ```js
-const { downloadAudio } = require("youtube-audio-downloader");
+const { downloadAudio } = require("youtube-audio-utils");
 
-const path = await downloadAudio("https://youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ", "Never Gonna Give You Up");
+const path = await downloadAudio(
+  "https://youtube.com/watch?v=dQw4w9WgXcQ",
+  "dQw4w9WgXcQ",
+  "Never Gonna Give You Up"
+);
 console.log("File saved at:", path);
 ```
 
@@ -70,19 +84,17 @@ console.log("File saved at:", path);
 Deletes a specific downloaded song.
 
 ```js
-const { removeSong } = require("youtube-audio-downloader");
+const { removeSong } = require("youtube-audio-utils");
 
 removeSong("dQw4w9WgXcQ", "Never Gonna Give You Up");
 ```
-
----
 
 ### `removeAllSongs()`
 
 Deletes the entire `music/` folder and all downloaded songs.
 
 ```js
-const { removeAllSongs } = require("youtube-audio-downloader");
+const { removeAllSongs } = require("youtube-audio-utils");
 
 removeAllSongs();
 ```
@@ -96,33 +108,29 @@ removeAllSongs();
 Adds a song to a download queue for the given `guildId`. Automatically starts downloading in sequence.
 
 ```js
-const { addToQueue } = require("youtube-audio-downloader");
+const { addToQueue } = require("youtube-audio-utils");
 
 addToQueue("guild123", videoUrl, videoId, title).then((filePath) => {
   console.log("Downloaded:", filePath);
 });
 ```
 
----
-
 ### `getQueue(guildId)`
 
 Returns the current pending songs in the queue for a given guild.
 
 ```js
-const { getQueue } = require("youtube-audio-downloader");
+const { getQueue } = require("youtube-audio-utils");
 
 console.log(getQueue("guild123"));
 ```
-
----
 
 ### `clearQueue(guildId)`
 
 Clears the queue for the given guild/server.
 
 ```js
-const { clearQueue } = require("youtube-audio-downloader");
+const { clearQueue } = require("youtube-audio-utils");
 
 clearQueue("guild123");
 ```
@@ -144,7 +152,7 @@ your-project/
 ## ✅ Requirements
 
 - Node.js v14 or higher
-- yt-dlp binary in `yt-dlp/` folder
+- yt-dlp binary in `yt-dlp/` folder (outside node_modules)
 
 ---
 
