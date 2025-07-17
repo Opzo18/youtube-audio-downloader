@@ -7,7 +7,7 @@ A lightweight utility library for searching and downloading YouTube audio using 
 ## 📦 Installation
 
 ```bash
-npm install youtube-audio-utils
+npm install audio-downloader-yt
 ```
 
 ---
