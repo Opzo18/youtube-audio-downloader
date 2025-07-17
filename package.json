@@ -1,0 +1,19 @@
+{
+  "name": "youtube-audio-downloader",
+  "version": "1.0.0",
+  "description": "Simple music downloader",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [
+    "youtube",
+    "download",
+    "yt-dlp",
+    "audio"
+  ],
+  "author": "Opzo",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.10.0",
+    "yt-dlp-wrap": "^2.3.12"
+  }
+}
