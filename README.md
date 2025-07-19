@@ -19,9 +19,11 @@ This package requires the [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) binary.
 You must **download the yt-dlp binary** and place it in a folder called `yt-dlp` at the **root of your project** (not inside `node_modules`).
 
 ### Windows
+
 [Download yt-dlp.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe)
 
 ### Linux/macOS
+
 [Download yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp)
 
 **Project structure:**
@@ -34,6 +36,33 @@ your-project/
 ```
 
 If the binary is not found, an error will be thrown with instructions.
+
+---
+
+## :cookie: YouTube Cookies (For age-restricted or login-required videos)
+
+Some videos on YouTube (e.g., age-restricted or private content) require authentication to download. To support these, you must provide a valid `cookies.txt` file from your browser session.
+
+### How to get cookies:
+
+1. Install the browser extension **[Get cookies.txt](https://chrome.google.com/webstore/detail/get-cookiestxt/ieogpggnfcgoinimjfkfalnmchhbbdkk)** or similar.
+2. Visit **youtube.com** while logged into your account.
+3. Click the extension and choose `Export cookies for this domain`.
+4. Save the file as `cookies.txt`.
+
+### Where to place it:
+
+Place `cookies.txt` in the **root of your project**:
+
+```
+your-project/
+├── yt-dlp/
+│   ├── yt-dlp or yt-dlp.exe
+│   └── cookies.txt
+
+```
+
+If a video requires authentication and no cookies are found, an error will be thrown with instructions.
 
 ---
 
@@ -67,11 +96,7 @@ Downloads the audio (MP3) of a YouTube video to the `music/` directory. Returns 
 ```js
 const { downloadAudio } = require("audio-downloader-yt");
 
-const path = await downloadAudio(
-  "https://youtube.com/watch?v=dQw4w9WgXcQ",
-  "dQw4w9WgXcQ",
-  "Never Gonna Give You Up"
-);
+const path = await downloadAudio("https://youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ", "Never Gonna Give You Up");
 console.log("File saved at:", path);
 ```
 

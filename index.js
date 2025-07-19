@@ -5,7 +5,10 @@ const crypto = require("crypto");
 
 const YtDlpWrap = require("yt-dlp-wrap").default;
 const binary = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+const ytDlpDir = path.join(process.cwd(), "yt-dlp");
 const ytDlpPath = path.join(process.cwd(), "yt-dlp", binary);
+const cookiesPath = path.join(process.cwd(), "yt-dlp", "cookies.txt");
+
 const ytdlp = new YtDlpWrap(ytDlpPath);
 
 const musicDir = path.join(__dirname, "music");
@@ -14,6 +17,10 @@ if (!fs.existsSync(musicDir)) fs.mkdirSync(musicDir);
 // ============================
 //          UTILS
 // ============================
+
+if (!fs.existsSync(ytDlpDir)) {
+  throw new Error(`Directory ${ytDlpDir} does not exist. Please create it and place yt-dlp binary inside.`);
+}
 
 if (!fs.existsSync(ytDlpPath)) {
   throw new Error(`yt-dlp binary not found at ${ytDlpPath}. Please download it from https://github.com/yt-dlp/yt-dlp and place it in ./yt-dlp/`);
@@ -80,18 +87,46 @@ async function downloadAudio(videoUrl, videoId, title) {
     return outputFile;
   }
 
-  await new Promise((resolve, reject) => {
-    ytdlp
-      .exec([videoUrl, "-f", "bestaudio", "-o", outputFile, "--no-playlist", "--quiet"])
-      .on("error", (err) => {
-        console.error(`YT-DLP Error: ${err.message}`);
-        reject(err);
-      })
-      .on("close", (code) => {
-        if (code !== 0) return reject(new Error(`YT-DLP exited with code ${code}`));
-        resolve();
-      });
-  });
+  async function runYtdlp(useCookies) {
+    const args = [videoUrl, "-f", "bestaudio", "-o", outputFile, "--no-playlist", "--quiet"];
+    if (useCookies) {
+      args.push("--cookies", cookiesPath);
+    }
+
+    return new Promise((resolve, reject) => {
+      ytdlp
+        .exec(args)
+        .on("error", (err) => {
+          console.error(`YT-DLP Error: ${err.message}`);
+          reject(err);
+        })
+        .on("close", (code) => {
+          if (code !== 0) return reject(new Error(`YT-DLP exited with code ${code}`));
+          resolve();
+        });
+    });
+  }
+
+  const cookiesExist = fs.existsSync(cookiesPath);
+
+  try {
+    await runYtdlp(cookiesExist);
+  } catch (err) {
+    const msg = err.message.toLowerCase();
+    if (
+      !cookiesExist &&
+      (msg.includes("sign in to confirm") || msg.includes("use --cookies") || msg.includes("cookie") || msg.includes("authentication"))
+    ) {
+      throw new Error(
+        `Cookies are required to download this audio.\n` +
+          `Please install a browser extension like "Get cookies.txt" (e.g. from Chrome Web Store),\n` +
+          `export your YouTube cookies as cookies.txt, and place the file at:\n` +
+          `${cookiesPath}`
+      );
+    } else {
+      throw err;
+    }
+  }
 
   return outputFile;
 }
