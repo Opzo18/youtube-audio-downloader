@@ -1,6 +1,6 @@
 {
   "name": "audio-downloader-yt",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Simple music downloader",
   "main": "index.js",
   "scripts": {},

@@ -8,6 +8,9 @@ const binary = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
 const ytDlpPath = path.join(process.cwd(), "yt-dlp", binary);
 const ytdlp = new YtDlpWrap(ytDlpPath);
 
+const musicDir = path.join(__dirname, "music");
+if (!fs.existsSync(musicDir)) fs.mkdirSync(musicDir);
+
 // ============================
 //          UTILS
 // ============================
@@ -30,7 +33,14 @@ function hashVideoId(videoId) {
 
 async function searchYouTube(query) {
   const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-  const response = await axios.get(url);
+  let response;
+
+  try {
+    response = await axios.get(url, { timeout: 5000, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64" } });
+  } catch (err) {
+    throw new Error(`Failed to fetch YouTube search results: ${err.message}`);
+  }
+
   const html = response.data;
 
   const match = html.match(/var ytInitialData = (\{.*?\});/s);
@@ -62,9 +72,6 @@ async function searchYouTube(query) {
 // ============================
 
 async function downloadAudio(videoUrl, videoId, title) {
-  const musicDir = path.join(__dirname, "music");
-  if (!fs.existsSync(musicDir)) fs.mkdirSync(musicDir);
-
   const safeTitle = sanitizeFilename(title);
   const hash = hashVideoId(videoId);
   const outputFile = path.join(musicDir, `${hash}-${safeTitle}.mp3`);
@@ -74,7 +81,16 @@ async function downloadAudio(videoUrl, videoId, title) {
   }
 
   await new Promise((resolve, reject) => {
-    ytdlp.exec([videoUrl, "-f", "bestaudio", "-o", outputFile, "--no-playlist", "--quiet"]).on("error", reject).on("close", resolve);
+    ytdlp
+      .exec([videoUrl, "-f", "bestaudio", "-o", outputFile, "--no-playlist", "--quiet"])
+      .on("error", (err) => {
+        console.error(`YT-DLP Error: ${err.message}`);
+        reject(err);
+      })
+      .on("close", (code) => {
+        if (code !== 0) return reject(new Error(`YT-DLP exited with code ${code}`));
+        resolve();
+      });
   });
 
   return outputFile;
@@ -85,7 +101,6 @@ async function downloadAudio(videoUrl, videoId, title) {
 // ============================
 
 function removeSong(videoId, title) {
-  const musicDir = path.join(__dirname, "music");
   const safeTitle = sanitizeFilename(title);
   const hash = hashVideoId(videoId);
   const filePath = path.join(musicDir, `${hash}-${safeTitle}.mp3`);
@@ -99,7 +114,6 @@ function removeSong(videoId, title) {
 }
 
 function removeAllSongs() {
-  const musicDir = path.join(__dirname, "music");
   if (fs.existsSync(musicDir)) fs.rmSync(musicDir, { recursive: true, force: true });
 }
 
