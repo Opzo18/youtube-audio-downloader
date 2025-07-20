@@ -1,4 +1,4 @@
-# audio-downloader-yt
+# simple-audio-downloader
 
 A lightweight utility library for searching and downloading YouTube audio using [`yt-dlp`](https://github.com/yt-dlp/yt-dlp). Includes built-in file caching, queue handling per guild (ideal for bots), and support for cleaning downloaded tracks.
 
@@ -7,7 +7,7 @@ A lightweight utility library for searching and downloading YouTube audio using 
 ## 📦 Installation
 
 ```bash
-npm install audio-downloader-yt
+npm install simple-audio-downloader
 ```
 
 ---
@@ -71,7 +71,7 @@ If a video requires authentication and no cookies are found, an error will be th
 Searches YouTube and returns the first video result.
 
 ```js
-const { searchYouTube } = require("audio-downloader-yt");
+const { searchYouTube } = require("simple-audio-downloader");
 
 const result = await searchYouTube("Never Gonna Give You Up");
 console.log(result);
@@ -94,7 +94,7 @@ console.log(result);
 Downloads the audio (MP3) of a YouTube video to the `music/` directory. Returns the path to the downloaded file.
 
 ```js
-const { downloadAudio } = require("audio-downloader-yt");
+const { downloadAudio } = require("simple-audio-downloader");
 
 const path = await downloadAudio("https://youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ", "Never Gonna Give You Up");
 console.log("File saved at:", path);
@@ -109,7 +109,7 @@ console.log("File saved at:", path);
 Deletes a specific downloaded song.
 
 ```js
-const { removeSong } = require("audio-downloader-yt");
+const { removeSong } = require("simple-audio-downloader");
 
 removeSong("dQw4w9WgXcQ", "Never Gonna Give You Up");
 ```
@@ -119,7 +119,7 @@ removeSong("dQw4w9WgXcQ", "Never Gonna Give You Up");
 Deletes the entire `music/` folder and all downloaded songs.
 
 ```js
-const { removeAllSongs } = require("audio-downloader-yt");
+const { removeAllSongs } = require("simple-audio-downloader");
 
 removeAllSongs();
 ```
@@ -133,7 +133,7 @@ removeAllSongs();
 Adds a song to a download queue for the given `guildId`. Automatically starts downloading in sequence.
 
 ```js
-const { addToQueue } = require("audio-downloader-yt");
+const { addToQueue } = require("simple-audio-downloader");
 
 addToQueue("guild123", videoUrl, videoId, title).then((filePath) => {
   console.log("Downloaded:", filePath);
@@ -145,7 +145,7 @@ addToQueue("guild123", videoUrl, videoId, title).then((filePath) => {
 Returns the current pending songs in the queue for a given guild.
 
 ```js
-const { getQueue } = require("audio-downloader-yt");
+const { getQueue } = require("simple-audio-downloader");
 
 console.log(getQueue("guild123"));
 ```
@@ -155,7 +155,7 @@ console.log(getQueue("guild123"));
 Clears the queue for the given guild/server.
 
 ```js
-const { clearQueue } = require("audio-downloader-yt");
+const { clearQueue } = require("simple-audio-downloader");
 
 clearQueue("guild123");
 ```
