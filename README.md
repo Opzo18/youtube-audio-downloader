@@ -45,7 +45,7 @@ Some videos on YouTube (e.g., age-restricted or private content) require authent
 
 ### How to get cookies:
 
-1. Install the browser extension **[Get cookies.txt](https://chrome.google.com/webstore/detail/get-cookiestxt/ieogpggnfcgoinimjfkfalnmchhbbdkk)** or similar.
+1. Install the browser extension **[Get cookies.txt](https://chromewebstore.google.com/detail/cclelndahbckbenkjhflpdbgdldlbecc?utm_source=item-share-cb)** or similar.
 2. Visit **youtube.com** while logged into your account.
 3. Click the extension and choose `Export cookies for this domain`.
 4. Save the file as `cookies.txt`.
