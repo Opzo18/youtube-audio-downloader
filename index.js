@@ -2,6 +2,7 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const https = require("https");
 
 const YtDlpWrap = require("yt-dlp-wrap").default;
 const binary = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
@@ -18,24 +19,67 @@ if (!fs.existsSync(musicDir)) fs.mkdirSync(musicDir);
 //          UTILS
 // ============================
 
+// Function to download the latest yt-dlp binary from GitHub
+async function downloadYtDlp() {
+  const url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/" + (process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
+
+  console.log(`Downloading yt-dlp from ${url}...`);
+
+  fs.mkdirSync(ytDlpDir, { recursive: true });
+
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(ytDlpPath);
+    https
+      .get(url, (response) => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`Download failed with status code: ${response.statusCode}`));
+          return;
+        }
+        response.pipe(file);
+        file.on("finish", () => {
+          file.close(() => {
+            if (process.platform !== "win32") {
+              fs.chmodSync(ytDlpPath, 0o755); // make executable on Linux/macOS
+            }
+            console.log("yt-dlp downloaded successfully!");
+            resolve();
+          });
+        });
+      })
+      .on("error", reject);
+  });
+}
+
+// Create yt-dlp folder if it doesn't exist
 if (!fs.existsSync(ytDlpDir)) {
-  throw new Error(`Directory ${ytDlpDir} does not exist. Please create it and place yt-dlp binary inside.`);
+  fs.mkdirSync(ytDlpDir, { recursive: true });
 }
 
+// Download yt-dlp if binary is missing
 if (!fs.existsSync(ytDlpPath)) {
-  throw new Error(`yt-dlp binary not found at ${ytDlpPath}. Please download it from https://github.com/yt-dlp/yt-dlp and place it in ./yt-dlp/`);
+  console.warn(`yt-dlp binary not found at ${ytDlpPath}. Downloading the latest version...`);
+  (async () => {
+    try {
+      await downloadYtDlp();
+    } catch (err) {
+      console.error("Failed to download yt-dlp:", err.message);
+      process.exit(1);
+    }
+  })();
 }
 
+// Sanitize filename for saving
 function sanitizeFilename(name) {
   return name.replace(/[<>:"/\\|?*\x00-\x1F]/g, "").substring(0, 100);
 }
 
+// Create short hash for video ID
 function hashVideoId(videoId) {
   return crypto.createHash("md5").update(videoId).digest("hex").substring(0, 8);
 }
 
 // ============================
-//          YT-SEARCH
+//           YT-SEARCH
 // ============================
 
 async function searchYouTube(query) {
@@ -43,15 +87,17 @@ async function searchYouTube(query) {
   let response;
 
   try {
-    response = await axios.get(url, { timeout: 5000, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64" } });
+    response = await axios.get(url, {
+      timeout: 5000,
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+    });
   } catch (err) {
     throw new Error(`Failed to fetch YouTube search results: ${err.message}`);
   }
 
   const html = response.data;
-
   const match = html.match(/var ytInitialData = (\{.*?\});/s);
-  if (!match) throw new Error("No ytInitialData");
+  if (!match) throw new Error("No ytInitialData found");
 
   const ytData = JSON.parse(match[1]);
   const videoItems =
@@ -89,9 +135,7 @@ async function downloadAudio(videoUrl, videoId, title) {
 
   async function runYtdlp(useCookies) {
     const args = [videoUrl, "-f", "bestaudio", "-o", outputFile, "--no-playlist", "--quiet"];
-    if (useCookies) {
-      args.push("--cookies", cookiesPath);
-    }
+    if (useCookies) args.push("--cookies", cookiesPath);
 
     return new Promise((resolve, reject) => {
       ytdlp
@@ -119,8 +163,8 @@ async function downloadAudio(videoUrl, videoId, title) {
     ) {
       throw new Error(
         `Cookies are required to download this audio.\n` +
-          `Please install a browser extension like "Get cookies.txt" (e.g. from Chrome Web Store),\n` +
-          `export your YouTube cookies as cookies.txt, and place the file at:\n` +
+          `Please install a browser extension like "Get cookies.txt",\n` +
+          `export your YouTube cookies as cookies.txt, and place it at:\n` +
           `${cookiesPath}`
       );
     } else {
@@ -132,7 +176,7 @@ async function downloadAudio(videoUrl, videoId, title) {
 }
 
 // ============================
-//           REMOVING
+//           REMOVE
 // ============================
 
 function removeSong(videoId, title) {
@@ -153,21 +197,17 @@ function removeAllSongs() {
 }
 
 // ============================
-//           QUEUING
+//           QUEUE
 // ============================
 
 const queues = new Map();
 
 function addToQueue(guildId, videoUrl, videoId, title) {
   if (!queues.has(guildId)) {
-    queues.set(guildId, {
-      queue: [],
-      isProcessing: false,
-    });
+    queues.set(guildId, { queue: [], isProcessing: false });
   }
 
   const queueData = queues.get(guildId);
-
   return new Promise((resolve, reject) => {
     queueData.queue.push({ videoUrl, videoId, title, resolve, reject });
     processQueue(guildId);
@@ -193,12 +233,7 @@ async function processQueue(guildId) {
 }
 
 function getQueue(guildId) {
-  return (
-    queues.get(guildId)?.queue.map((item) => ({
-      videoId: item.videoId,
-      title: item.title,
-    })) || []
-  );
+  return queues.get(guildId)?.queue.map((item) => ({ videoId: item.videoId, title: item.title })) || [];
 }
 
 function clearQueue(guildId) {
