@@ -12,8 +12,14 @@ const cookiesPath = path.join(process.cwd(), "yt-dlp", "cookies.txt");
 
 const ytdlp = new YtDlpWrap(ytDlpPath);
 
-const musicDir = path.join(__dirname, "music");
-if (!fs.existsSync(musicDir)) fs.mkdirSync(musicDir);
+// Separate folders for audio and video
+const mediaDir = path.join(__dirname, "media");
+const videoDir = path.join(mediaDir, "videos");
+const audioDir = path.join(mediaDir, "audio");
+const metadataDir = path.join(mediaDir, "metadata");
+if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
+if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
+if (!fs.existsSync(metadataDir)) fs.mkdirSync(metadataDir, { recursive: true });
 
 // ============================
 //          UTILS
@@ -103,38 +109,57 @@ async function searchYouTube(query) {
   const videoItems =
     ytData.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents || [];
 
+  const results = [];
   for (const item of videoItems) {
     if (item.videoRenderer) {
       const video = item.videoRenderer;
-      return {
+      results.push({
         title: video.title.runs[0].text,
         author: video.ownerText.runs[0].text,
         thumbnail: video.thumbnail.thumbnails.slice(-1)[0].url,
         videoId: video.videoId,
         duration: video.lengthText?.simpleText || "LIVE",
         url: `https://www.youtube.com/watch?v=${video.videoId}`,
-      };
+      });
     }
   }
 
-  throw new Error("No video found");
+  return results.length > 0 ? results : [];
 }
 
 // ============================
 //           DOWNLOAD
 // ============================
 
-async function downloadAudio(videoUrl, videoId, title) {
+async function downloadMedia(videoUrl, videoId, title, options = {}) {
+  const { type = "video", quality = "720p", retries = 2 } = options; // Default to video, 720p
   const safeTitle = sanitizeFilename(title);
   const hash = hashVideoId(videoId);
-  const outputFile = path.join(musicDir, `${hash}-${safeTitle}.mp3`);
+  const outputDir = type === "audio" ? audioDir : videoDir;
+  const extension = type === "audio" ? "mp3" : "mp4";
+  const outputFile = path.join(outputDir, `${hash}-${safeTitle}.${extension}`);
+  const metadataFile = path.join(metadataDir, `${hash}-${safeTitle}.json`);
 
   if (fs.existsSync(outputFile)) {
-    return outputFile;
+    console.log(`File already exists: ${outputFile}`);
+    return { file: outputFile, metadata: fs.existsSync(metadataFile) ? JSON.parse(fs.readFileSync(metadataFile)) : {} };
   }
 
-  async function runYtdlp(useCookies) {
-    const args = [videoUrl, "-f", "bestaudio", "-o", outputFile, "--no-playlist", "--quiet"];
+  async function runYtdlp(useCookies, attempt = 1) {
+    const format =
+      type === "audio" ? "bestaudio[ext=mp3]" : `bestvideo[height<=${quality.replace("p", "")}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]`;
+    const args = [
+      videoUrl,
+      "-f",
+      format,
+      "-o",
+      outputFile,
+      "--no-playlist",
+      "--write-info-json",
+      "--match-filter",
+      "license=Creative Commons", // Prioritize CC-licensed videos
+      "--quiet",
+    ];
     if (useCookies) args.push("--cookies", cookiesPath);
 
     return new Promise((resolve, reject) => {
@@ -142,11 +167,28 @@ async function downloadAudio(videoUrl, videoId, title) {
         .exec(args)
         .on("error", (err) => {
           console.error(`YT-DLP Error: ${err.message}`);
-          reject(err);
+          if (attempt < retries && err.message.includes("network")) {
+            console.log(`Retrying (${attempt + 1}/${retries})...`);
+            setTimeout(
+              () =>
+                runYtdlp(useCookies, attempt + 1)
+                  .then(resolve)
+                  .catch(reject),
+              2000
+            );
+          } else {
+            reject(err);
+          }
         })
         .on("close", (code) => {
           if (code !== 0) return reject(new Error(`YT-DLP exited with code ${code}`));
-          resolve();
+          // Read metadata from JSON file
+          const jsonPath = outputFile.replace(`.${extension}`, ".info.json");
+          const metadata = fs.existsSync(jsonPath) ? JSON.parse(fs.readFileSync(jsonPath)) : {};
+          if (fs.existsSync(jsonPath)) {
+            fs.renameSync(jsonPath, metadataFile); // Move to metadata folder
+          }
+          resolve({ file: outputFile, metadata });
         });
     });
   }
@@ -154,7 +196,8 @@ async function downloadAudio(videoUrl, videoId, title) {
   const cookiesExist = fs.existsSync(cookiesPath);
 
   try {
-    await runYtdlp(cookiesExist);
+    const result = await runYtdlp(cookiesExist);
+    return result;
   } catch (err) {
     const msg = err.message.toLowerCase();
     if (
@@ -162,7 +205,7 @@ async function downloadAudio(videoUrl, videoId, title) {
       (msg.includes("sign in to confirm") || msg.includes("use --cookies") || msg.includes("cookie") || msg.includes("authentication"))
     ) {
       throw new Error(
-        `Cookies are required to download this audio.\n` +
+        `Cookies are required to download this media.\n` +
           `Please install a browser extension like "Get cookies.txt",\n` +
           `export your YouTube cookies as cookies.txt, and place it at:\n` +
           `${cookiesPath}`
@@ -171,29 +214,60 @@ async function downloadAudio(videoUrl, videoId, title) {
       throw err;
     }
   }
+}
 
-  return outputFile;
+// Batch download multiple videos from a search query
+async function batchDownloadMedia(query, options = {}) {
+  const { maxVideos = 10, type = "video", quality = "720p" } = options;
+  const videos = await searchYouTube(query);
+  if (!videos.length) throw new Error(`No videos found for query: ${query}`);
+
+  const results = [];
+  for (const video of videos.slice(0, maxVideos)) {
+    try {
+      const result = await downloadMedia(video.url, video.videoId, video.title, { type, quality });
+      results.push(result);
+    } catch (err) {
+      console.error(`Failed to download ${video.title}: ${err.message}`);
+    }
+  }
+  return results;
 }
 
 // ============================
 //           REMOVE
 // ============================
 
-function removeSong(videoId, title) {
+function removeMedia(videoId, title, type = "video") {
   const safeTitle = sanitizeFilename(title);
   const hash = hashVideoId(videoId);
-  const filePath = path.join(musicDir, `${hash}-${safeTitle}.mp3`);
+  const outputDir = type === "audio" ? audioDir : videoDir;
+  const extension = type === "audio" ? "mp3" : "mp4";
+  const filePath = path.join(outputDir, `${hash}-${safeTitle}.${extension}`);
+  const metadataFile = path.join(metadataDir, `${hash}-${safeTitle}.json`);
 
+  let deleted = false;
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
-    return true;
-  } else {
-    return false;
+    deleted = true;
   }
+  if (fs.existsSync(metadataFile)) {
+    fs.unlinkSync(metadataFile);
+  }
+  return deleted;
 }
 
-function removeAllSongs() {
-  if (fs.existsSync(musicDir)) fs.rmSync(musicDir, { recursive: true, force: true });
+function removeAllMedia(type = "all") {
+  if (type === "all" || type === "video") {
+    if (fs.existsSync(videoDir)) fs.rmSync(videoDir, { recursive: true, force: true });
+    fs.mkdirSync(videoDir, { recursive: true });
+  }
+  if (type === "all" || type === "audio") {
+    if (fs.existsSync(audioDir)) fs.rmSync(audioDir, { recursive: true, force: true });
+    fs.mkdirSync(audioDir, { recursive: true });
+  }
+  if (fs.existsSync(metadataDir)) fs.rmSync(metadataDir, { recursive: true, force: true });
+  fs.mkdirSync(metadataDir, { recursive: true });
 }
 
 // ============================
@@ -202,14 +276,14 @@ function removeAllSongs() {
 
 const queues = new Map();
 
-function addToQueue(guildId, videoUrl, videoId, title) {
+function addToQueue(guildId, videoUrl, videoId, title, options = {}) {
   if (!queues.has(guildId)) {
     queues.set(guildId, { queue: [], isProcessing: false });
   }
 
   const queueData = queues.get(guildId);
   return new Promise((resolve, reject) => {
-    queueData.queue.push({ videoUrl, videoId, title, resolve, reject });
+    queueData.queue.push({ videoUrl, videoId, title, options, resolve, reject });
     processQueue(guildId);
   });
 }
@@ -219,10 +293,10 @@ async function processQueue(guildId) {
   if (!queueData || queueData.isProcessing || queueData.queue.length === 0) return;
 
   queueData.isProcessing = true;
-  const { videoUrl, videoId, title, resolve, reject } = queueData.queue.shift();
+  const { videoUrl, videoId, title, options, resolve, reject } = queueData.queue.shift();
 
   try {
-    const result = await downloadAudio(videoUrl, videoId, title);
+    const result = await downloadMedia(videoUrl, videoId, title, options);
     resolve(result);
   } catch (err) {
     reject(err);
@@ -233,7 +307,14 @@ async function processQueue(guildId) {
 }
 
 function getQueue(guildId) {
-  return queues.get(guildId)?.queue.map((item) => ({ videoId: item.videoId, title: item.title })) || [];
+  return (
+    queues.get(guildId)?.queue.map((item) => ({
+      videoId: item.videoId,
+      title: item.title,
+      type: item.options.type || "video",
+      quality: item.options.quality || "720p",
+    })) || []
+  );
 }
 
 function clearQueue(guildId) {
@@ -250,9 +331,10 @@ function clearQueue(guildId) {
 
 module.exports = {
   searchYouTube,
-  downloadAudio,
-  removeSong,
-  removeAllSongs,
+  downloadMedia,
+  batchDownloadMedia,
+  removeMedia,
+  removeAllMedia,
   addToQueue,
   getQueue,
   clearQueue,

@@ -1,10 +1,12 @@
-# simple-audio-downloader
+# 🎥 simple-audio-downloader 🐱
 
-A lightweight utility library for searching and downloading YouTube audio using [`yt-dlp`](https://github.com/yt-dlp/yt-dlp). Includes built-in file caching, queue handling per guild (ideal for bots), and support for cleaning downloaded tracks.
+A super lightweight Node.js library to search and download **YouTube audio and video** using [`yt-dlp`](https://github.com/yt-dlp/yt-dlp). Perfect for grabbing **funny animal clips** or meme-worthy tracks for your next YouTube montage! 🌟 Features include audio (MP3) and video (MP4) downloads, customizable quality (480p, 720p, 1080p), batch downloading for queries like "funny cat fails," Creative Commons filtering for YouTube-safe content, metadata storage, and queue handling for bots. All free, all local, no hassle! 🚀
 
 ---
 
 ## 📦 Installation
+
+Get started in a snap:
 
 ```bash
 npm install simple-audio-downloader
@@ -12,21 +14,16 @@ npm install simple-audio-downloader
 
 ---
 
-## ⚠️ yt-dlp binary required
+## ⚙️ yt-dlp Binary Setup
 
-This package requires the [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) binary.
+This package uses the awesome [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) binary to do the heavy lifting.
 
-You must **download the yt-dlp binary** and place it in a folder called `yt-dlp` at the **root of your project** (not inside `node_modules`).
+**Step 1**: Download the binary and place it in a `yt-dlp/` folder at your project’s root (not in `node_modules`).
 
-### Windows
+- **Windows**: [Grab yt-dlp.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe)
+- **Linux/macOS**: [Grab yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp)
 
-[Download yt-dlp.exe](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe)
-
-### Linux/macOS
-
-[Download yt-dlp](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp)
-
-**Project structure:**
+**Project structure**:
 
 ```
 your-project/
@@ -35,124 +32,155 @@ your-project/
 ├── index.js
 ```
 
-If the binary is not found, an error will be thrown with instructions.
+**No binary? No problem!** The package auto-downloads it if missing. 😎
 
 ---
 
-## :cookie: YouTube Cookies (For age-restricted or login-required videos)
+## 🍪 YouTube Cookies (Optional)
 
-Some videos on YouTube (e.g., age-restricted or private content) require authentication to download. To support these, you must provide a valid `cookies.txt` file from your browser session.
+Some videos (age-restricted or private) need a `cookies.txt` file for access.
 
 ### How to get cookies:
 
-1. Install the browser extension **[Get cookies.txt](https://chromewebstore.google.com/detail/cclelndahbckbenkjhflpdbgdldlbecc?utm_source=item-share-cb)** or similar.
-2. Visit **youtube.com** while logged into your account.
-3. Click the extension and choose `Export cookies for this domain`.
-4. Save the file as `cookies.txt`.
-
-### Where to place it:
-
-Place `cookies.txt` in the **root of your project**:
+1. Install the **[Get cookies.txt](https://chromewebstore.google.com/detail/cclelndahbckbenkjhflpdbgdldlbecc?utm_source=item-share-cb)** browser extension.
+2. Log into **youtube.com**.
+3. Export cookies for the domain using the extension.
+4. Save as `cookies.txt` in your `yt-dlp/` folder:
 
 ```
 your-project/
 ├── yt-dlp/
 │   ├── yt-dlp or yt-dlp.exe
 │   └── cookies.txt
-
 ```
 
-If a video requires authentication and no cookies are found, an error will be thrown with instructions.
+If a video needs cookies and they’re missing, you’ll get a clear error with instructions. 🛠️
 
 ---
 
 ## 🔍 `searchYouTube(query)`
 
-Searches YouTube and returns the first video result.
+Search YouTube for videos like "funny animal fails" and get a list of results with titles, authors, and more.
 
 ```js
 const { searchYouTube } = require("simple-audio-downloader");
 
-const result = await searchYouTube("Never Gonna Give You Up");
-console.log(result);
+const results = await searchYouTube("funny cat fails");
+console.log(results);
 /*
-{
-  title: "Rick Astley - Never Gonna Give You Up (Video)",
-  author: "Rick Astley",
-  thumbnail: "https://...",
-  videoId: "dQw4w9WgXcQ",
-  duration: "3:33",
-  url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-}
+[
+  {
+    title: "Funny Cat Fails Compilation",
+    author: "PetLovers",
+    thumbnail: "https://...",
+    videoId: "abc123",
+    duration: "3:45",
+    url: "https://www.youtube.com/watch?v=abc123"
+  },
+  ...
+]
 */
 ```
 
 ---
 
-## 🎵 `downloadAudio(videoUrl, videoId, title)`
+## 🎬 `downloadMedia(videoUrl, videoId, title, options)`
 
-Downloads the audio (MP3) of a YouTube video to the `music/` directory. Returns the path to the downloaded file.
+Download audio (MP3) or video (MP4) to `media/audio/` or `media/videos/`. Saves metadata (title, tags, duration) to `media/metadata/`. Perfect for snagging that viral cat clip! 🐾
+
+**Options**:
+
+- `type`: `"audio"` or `"video"` (default: `"video"`)
+- `quality`: For video: `"480p"`, `"720p"`, `"1080p"` (default: `"720p"`); for audio: ignored (best MP3)
+- `retries`: Retry attempts for network issues (default: 2)
 
 ```js
-const { downloadAudio } = require("simple-audio-downloader");
+const { downloadMedia } = require("simple-audio-downloader");
 
-const path = await downloadAudio("https://youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ", "Never Gonna Give You Up");
-console.log("File saved at:", path);
+const result = await downloadMedia("https://youtube.com/watch?v=abc123", "abc123", "Funny Cat Fails Compilation", { type: "video", quality: "720p" });
+console.log("Saved:", result.file, "Metadata:", result.metadata);
+```
+
+**Pro Tip**: Downloads prioritize Creative Commons-licensed videos to keep your YouTube montages safe! ✅
+
+---
+
+## 📚 `batchDownloadMedia(query, options)`
+
+Download multiple videos from a single search query (e.g., "funny dog zoomies"). Ideal for batch-grabbing clips for your next montage! 🎉
+
+**Options**:
+
+- `maxVideos`: Max videos to download (default: 10)
+- `type`: `"audio"` or `"video"` (default: `"video"`)
+- `quality`: `"480p"`, `"720p"`, `"1080p"` (default: `"720p"`)
+
+```js
+const { batchDownloadMedia } = require("simple-audio-downloader");
+
+const results = await batchDownloadMedia("funny animal fails", { maxVideos: 5, type: "video", quality: "720p" });
+console.log("Downloaded:", results);
 ```
 
 ---
 
-## 🧹 File Management
+## 🧹 File Cleanup
 
-### `removeSong(videoId, title)`
+### `removeMedia(videoId, title, type)`
 
-Deletes a specific downloaded song.
+Delete a specific audio or video file and its metadata.
 
 ```js
-const { removeSong } = require("simple-audio-downloader");
+const { removeMedia } = require("simple-audio-downloader");
 
-removeSong("dQw4w9WgXcQ", "Never Gonna Give You Up");
+removeMedia("abc123", "Funny Cat Fails Compilation", "video");
 ```
 
-### `removeAllSongs()`
+### `removeAllMedia(type)`
 
-Deletes the entire `music/` folder and all downloaded songs.
+Wipe all files in `"audio"`, `"video"`, or `"all"` directories.
 
 ```js
-const { removeAllSongs } = require("simple-audio-downloader");
+const { removeAllMedia } = require("simple-audio-downloader");
 
-removeAllSongs();
+removeAllMedia("video"); // Clears media/videos/ and media/metadata/
 ```
 
 ---
 
-## 📁 Queue Management (per guild/server)
+## 📋 Queue Management (Bot-Friendly)
 
-### `addToQueue(guildId, videoUrl, videoId, title)`
+### `addToQueue(guildId, videoUrl, videoId, title, options)`
 
-Adds a song to a download queue for the given `guildId`. Automatically starts downloading in sequence.
+Add a download to a guild’s queue. Downloads process one-by-one, perfect for bot servers.
 
 ```js
 const { addToQueue } = require("simple-audio-downloader");
 
-addToQueue("guild123", videoUrl, videoId, title).then((filePath) => {
-  console.log("Downloaded:", filePath);
+addToQueue("guild123", videoUrl, videoId, title, { type: "video", quality: "720p" }).then((result) => {
+  console.log("Downloaded:", result.file, result.metadata);
 });
 ```
 
 ### `getQueue(guildId)`
 
-Returns the current pending songs in the queue for a given guild.
+Check pending downloads for a guild.
 
 ```js
 const { getQueue } = require("simple-audio-downloader");
 
 console.log(getQueue("guild123"));
+/*
+[
+  { videoId: "abc123", title: "Funny Cat Fails Compilation", type: "video", quality: "720p" },
+  ...
+]
+*/
 ```
 
 ### `clearQueue(guildId)`
 
-Clears the queue for the given guild/server.
+Clear a guild’s download queue.
 
 ```js
 const { clearQueue } = require("simple-audio-downloader");
@@ -162,25 +190,39 @@ clearQueue("guild123");
 
 ---
 
-## 🧾 File Structure
+## 📂 File Structure
+
+Your downloads and metadata are neatly organized:
 
 ```
 your-project/
 ├── yt-dlp/
-│   └── yt-dlp (or yt-dlp.exe)
-├── music/
-│   └── <downloaded audio files>
+│   ├── yt-dlp or yt-dlp.exe
+│   └── cookies.txt (optional)
+├── media/
+│   ├── audio/
+│   │   └── <MP3 files>
+│   ├── videos/
+│   │   └── <MP4 files>
+│   ├── metadata/
+│   │   └── <JSON metadata files>
+├── index.js
 ```
 
 ---
 
-## ✅ Requirements
+## 🛠️ Requirements
 
 - Node.js v14 or higher
-- yt-dlp binary in `yt-dlp/` folder (outside node_modules)
+- `yt-dlp` binary in `yt-dlp/` folder (auto-downloads if missing)
+- Optional: `cookies.txt` for restricted content
 
 ---
 
-## 📝 License
+## 📜 License
 
-MIT
+MIT - Free to use, remix, and share! 😺
+
+---
+
+**Made for creators who love funny animal montages and chill coding vibes!** 🐶🎶
