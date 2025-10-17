@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const https = require("https");
+const ffmpegPath = require("ffmpeg-static");
 
 const YtDlpWrap = require("yt-dlp-wrap").default;
 const binary = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
@@ -26,34 +27,63 @@ if (!fs.existsSync(metadataDir)) fs.mkdirSync(metadataDir, { recursive: true });
 // ============================
 
 // Function to download the latest yt-dlp binary from GitHub
-async function downloadYtDlp() {
-  const url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/" + (process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
+async function downloadYtDlp(retries = 2) {
+  console.log("🔄 Fetching latest yt-dlp release info...");
 
-  console.log(`Downloading yt-dlp from ${url}...`);
+  const apiUrl = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
+  let response;
+  try {
+    response = await axios.get(apiUrl, {
+      timeout: 10000,
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+    });
+  } catch (err) {
+    throw new Error(`Failed to fetch latest release: ${err.message}. Try manual download from https://github.com/yt-dlp/yt-dlp/releases/latest`);
+  }
+
+  const { tag_name } = response.data;
+  const binaryName = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+  const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/download/${tag_name}/${binaryName}`;
+
+  console.log(`📥 Downloading yt-dlp ${tag_name} from ${downloadUrl}...`);
 
   fs.mkdirSync(ytDlpDir, { recursive: true });
 
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(ytDlpPath);
-    https
-      .get(url, (response) => {
-        if (response.statusCode !== 200) {
-          reject(new Error(`Download failed with status code: ${response.statusCode}`));
-          return;
-        }
-        response.pipe(file);
-        file.on("finish", () => {
-          file.close(() => {
-            if (process.platform !== "win32") {
-              fs.chmodSync(ytDlpPath, 0o755); // make executable on Linux/macOS
-            }
-            console.log("yt-dlp downloaded successfully!");
-            resolve();
-          });
+  try {
+    const fileResponse = await axios({
+      method: "get",
+      url: downloadUrl,
+      responseType: "stream",
+      timeout: 30000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        Accept: "application/octet-stream",
+      },
+    });
+
+    return new Promise((resolve, reject) => {
+      const file = fs.createWriteStream(ytDlpPath);
+      fileResponse.data.pipe(file);
+
+      file.on("finish", () => {
+        file.close(() => {
+          if (process.platform !== "win32") {
+            fs.chmodSync(ytDlpPath, 0o755);
+          }
+          console.log(`✅ yt-dlp ${tag_name} downloaded successfully!`);
+          resolve();
         });
-      })
-      .on("error", reject);
-  });
+      });
+
+      file.on("error", reject);
+    });
+  } catch (err) {
+    if (retries > 0) {
+      console.log(`🔄 Retry ${3 - retries}/2...`);
+      return downloadYtDlp(retries - 1);
+    }
+    throw new Error(`Download failed after retries: ${err.message}. Try manual download from ${downloadUrl}`);
+  }
 }
 
 // Create yt-dlp folder if it doesn't exist
@@ -132,7 +162,7 @@ async function searchYouTube(query) {
 // ============================
 
 async function downloadMedia(videoUrl, videoId, title, options = {}) {
-  const { type = "video", quality = "720p", retries = 2 } = options; // Default to video, 720p
+  const { type = "video", quality = "1080p", retries = 2 } = options;
   const safeTitle = sanitizeFilename(title);
   const hash = hashVideoId(videoId);
   const outputDir = type === "audio" ? audioDir : videoDir;
@@ -146,48 +176,27 @@ async function downloadMedia(videoUrl, videoId, title, options = {}) {
   }
 
   async function runYtdlp(useCookies, attempt = 1) {
-    const format =
-      type === "audio" ? "bestaudio[ext=mp3]" : `bestvideo[height<=${quality.replace("p", "")}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]`;
-    const args = [
-      videoUrl,
-      "-f",
-      format,
-      "-o",
-      outputFile,
-      "--no-playlist",
-      "--write-info-json",
-      "--match-filter",
-      "license=Creative Commons", // Prioritize CC-licensed videos
-      "--quiet",
-    ];
+    let format = type === "audio" ? "bestaudio/best" : `bestvideo[height<=${quality.replace("p", "")}]+bestaudio/best`;
+
+    const args = [videoUrl, "-f", format, "-o", outputFile, "--no-playlist", "--write-info-json", "--quiet"];
+
+    if (type === "audio") {
+      args.push("--extract-audio", "--audio-format", "mp3", "--audio-quality", "0", "--ffmpeg-location", ffmpegPath);
+    } else {
+      args.push("--merge-output-format", "mp4", "--remux-video", "mp4");
+    }
+
     if (useCookies) args.push("--cookies", cookiesPath);
 
     return new Promise((resolve, reject) => {
       ytdlp
         .exec(args)
-        .on("error", (err) => {
-          console.error(`YT-DLP Error: ${err.message}`);
-          if (attempt < retries && err.message.includes("network")) {
-            console.log(`Retrying (${attempt + 1}/${retries})...`);
-            setTimeout(
-              () =>
-                runYtdlp(useCookies, attempt + 1)
-                  .then(resolve)
-                  .catch(reject),
-              2000
-            );
-          } else {
-            reject(err);
-          }
-        })
+        .on("error", reject)
         .on("close", (code) => {
           if (code !== 0) return reject(new Error(`YT-DLP exited with code ${code}`));
-          // Read metadata from JSON file
-          const jsonPath = outputFile.replace(`.${extension}`, ".info.json");
+          const jsonPath = outputFile.replace(/\.(mp3|mp4)$/, ".info.json");
           const metadata = fs.existsSync(jsonPath) ? JSON.parse(fs.readFileSync(jsonPath)) : {};
-          if (fs.existsSync(jsonPath)) {
-            fs.renameSync(jsonPath, metadataFile); // Move to metadata folder
-          }
+          if (fs.existsSync(jsonPath)) fs.renameSync(jsonPath, metadataFile);
           resolve({ file: outputFile, metadata });
         });
     });
@@ -218,7 +227,7 @@ async function downloadMedia(videoUrl, videoId, title, options = {}) {
 
 // Batch download multiple videos from a search query
 async function batchDownloadMedia(query, options = {}) {
-  const { maxVideos = 10, type = "video", quality = "720p" } = options;
+  const { maxVideos = 10, type = "video", quality = "1080p" } = options;
   const videos = await searchYouTube(query);
   if (!videos.length) throw new Error(`No videos found for query: ${query}`);
 
@@ -312,7 +321,7 @@ function getQueue(guildId) {
       videoId: item.videoId,
       title: item.title,
       type: item.options.type || "video",
-      quality: item.options.quality || "720p",
+      quality: item.options.quality || "1080p",
     })) || []
   );
 }
