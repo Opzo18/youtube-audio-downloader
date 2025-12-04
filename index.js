@@ -179,7 +179,6 @@ async function downloadMedia(videoUrl, videoId, title, options = {}) {
       .on("close", (code) => {
         if (code !== 0) return reject(new Error(`YT-DLP exited with code ${code}`));
 
-        // przeniesienie metadata do folderu metadata
         const jsonPath = outputFile.replace(/\.(mp3|mp4)$/, ".info.json");
         let metadata = {};
         if (fs.existsSync(jsonPath)) {
@@ -204,7 +203,7 @@ async function batchDownloadMedia(query, options = {}) {
     try {
       const res = await downloadMedia(video.url, video.videoId, video.title, options);
       results.push(res);
-      await new Promise((r) => setTimeout(r, 500)); // opóźnienie żeby pliki zdążyły "domknąć się"
+      await new Promise((r) => setTimeout(r, 500)); 
     } catch (err) {
       console.error(`Failed: ${video.title} -> ${err.message}`);
     }
