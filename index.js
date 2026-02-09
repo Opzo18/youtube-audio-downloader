@@ -2,7 +2,7 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const ffmpegPath = require("ffmpeg-static");
+const ffmpegPath = "ffmpeg";
 
 const YtDlpWrap = require("yt-dlp-wrap").default;
 const binary = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
@@ -39,7 +39,9 @@ async function downloadYtDlp(retries = 2) {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
     });
   } catch (err) {
-    throw new Error(`Failed to fetch latest release: ${err.message}. Try manual download from https://github.com/yt-dlp/yt-dlp/releases/latest`);
+    throw new Error(
+      `Failed to fetch latest release: ${err.message}. Try manual download from https://github.com/yt-dlp/yt-dlp/releases/latest`,
+    );
   }
 
   const { tag_name } = response.data;
@@ -83,7 +85,9 @@ async function downloadYtDlp(retries = 2) {
       console.log(`🔄 Retry ${3 - retries}/2...`);
       return downloadYtDlp(retries - 1);
     }
-    throw new Error(`Download failed after retries: ${err.message}. Try manual download from ${downloadUrl}`);
+    throw new Error(
+      `Download failed after retries: ${err.message}. Try manual download from ${downloadUrl}`,
+    );
   }
 }
 
@@ -94,7 +98,9 @@ if (!fs.existsSync(ytDlpDir)) {
 
 // Download yt-dlp if binary is missing
 if (!fs.existsSync(ytDlpPath)) {
-  console.warn(`yt-dlp binary not found at ${ytDlpPath}. Downloading the latest version...`);
+  console.warn(
+    `yt-dlp binary not found at ${ytDlpPath}. Downloading the latest version...`,
+  );
   (async () => {
     try {
       await downloadYtDlp();
@@ -129,7 +135,8 @@ async function searchYouTube(query) {
 
   const ytData = JSON.parse(match[1]);
   const items =
-    ytData.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents || [];
+    ytData.contents?.twoColumnSearchResultsRenderer?.primaryContents
+      ?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents || [];
 
   const results = [];
   for (const item of items) {
@@ -161,13 +168,39 @@ async function downloadMedia(videoUrl, videoId, title, options = {}) {
   const metadataFile = path.join(metadataDir, `${hash}-${safeTitle}.json`);
 
   if (fs.existsSync(outputFile)) {
-    return { file: outputFile, metadata: fs.existsSync(metadataFile) ? JSON.parse(fs.readFileSync(metadataFile)) : {} };
+    return {
+      file: outputFile,
+      metadata: fs.existsSync(metadataFile)
+        ? JSON.parse(fs.readFileSync(metadataFile))
+        : {},
+    };
   }
 
-  const format = type === "audio" ? "bestaudio/best" : `bestvideo[height<=${quality.replace("p", "")}]+bestaudio/best`;
-  const args = [videoUrl, "-f", format, "-o", outputFile, "--no-playlist", "--write-info-json", "--quiet"];
+  const format =
+    type === "audio"
+      ? "bestaudio/best"
+      : `bestvideo[height<=${quality.replace("p", "")}]+bestaudio/best`;
+  const args = [
+    videoUrl,
+    "-f",
+    format,
+    "-o",
+    outputFile,
+    "--no-playlist",
+    "--write-info-json",
+    "--quiet",
+  ];
 
-  if (type === "audio") args.push("--extract-audio", "--audio-format", "mp3", "--audio-quality", "0", "--ffmpeg-location", ffmpegPath);
+  if (type === "audio")
+    args.push(
+      "--extract-audio",
+      "--audio-format",
+      "mp3",
+      "--audio-quality",
+      "0",
+      "--ffmpeg-location",
+      ffmpegPath,
+    );
   else args.push("--merge-output-format", "mp4", "--remux-video", "mp4");
 
   if (fs.existsSync(cookiesPath)) args.push("--cookies", cookiesPath);
@@ -177,7 +210,8 @@ async function downloadMedia(videoUrl, videoId, title, options = {}) {
       .exec(args)
       .on("error", reject)
       .on("close", (code) => {
-        if (code !== 0) return reject(new Error(`YT-DLP exited with code ${code}`));
+        if (code !== 0)
+          return reject(new Error(`YT-DLP exited with code ${code}`));
 
         const jsonPath = outputFile.replace(/\.(mp3|mp4)$/, ".info.json");
         let metadata = {};
@@ -201,9 +235,14 @@ async function batchDownloadMedia(query, options = {}) {
   const results = [];
   for (const video of videos.slice(0, maxVideos)) {
     try {
-      const res = await downloadMedia(video.url, video.videoId, video.title, options);
+      const res = await downloadMedia(
+        video.url,
+        video.videoId,
+        video.title,
+        options,
+      );
       results.push(res);
-      await new Promise((r) => setTimeout(r, 500)); 
+      await new Promise((r) => setTimeout(r, 500));
     } catch (err) {
       console.error(`Failed: ${video.title} -> ${err.message}`);
     }
@@ -244,20 +283,30 @@ function removeAllMedia(type = "all") {
 const queues = new Map();
 
 function addToQueue(guildId, videoUrl, videoId, title, options = {}) {
-  if (!queues.has(guildId)) queues.set(guildId, { queue: [], isProcessing: false });
+  if (!queues.has(guildId))
+    queues.set(guildId, { queue: [], isProcessing: false });
   const queueData = queues.get(guildId);
   return new Promise((resolve, reject) => {
-    queueData.queue.push({ videoUrl, videoId, title, options, resolve, reject });
+    queueData.queue.push({
+      videoUrl,
+      videoId,
+      title,
+      options,
+      resolve,
+      reject,
+    });
     processQueue(guildId);
   });
 }
 
 async function processQueue(guildId) {
   const queueData = queues.get(guildId);
-  if (!queueData || queueData.isProcessing || queueData.queue.length === 0) return;
+  if (!queueData || queueData.isProcessing || queueData.queue.length === 0)
+    return;
 
   queueData.isProcessing = true;
-  const { videoUrl, videoId, title, options, resolve, reject } = queueData.queue.shift();
+  const { videoUrl, videoId, title, options, resolve, reject } =
+    queueData.queue.shift();
 
   try {
     const result = await downloadMedia(videoUrl, videoId, title, options);
@@ -274,7 +323,12 @@ function getQueue(guildId) {
   return (
     queues
       .get(guildId)
-      ?.queue.map((i) => ({ videoId: i.videoId, title: i.title, type: i.options.type || "video", quality: i.options.quality || "1080p" })) || []
+      ?.queue.map((i) => ({
+        videoId: i.videoId,
+        title: i.title,
+        type: i.options.type || "video",
+        quality: i.options.quality || "1080p",
+      })) || []
   );
 }
 

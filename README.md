@@ -14,6 +14,17 @@ npm install simple-audio-downloader
 
 ---
 
+## 🛠️ System Requirements
+
+- **Node.js**: v14 or higher
+- **FFmpeg**: Must be installed on your system.
+  - **Linux**: `sudo apt install ffmpeg`
+  - **macOS**: `brew install ffmpeg`
+  - **Windows**: [Download from ffmpeg.org](https://ffmpeg.org/download.html)
+  - **Termux**: `pkg install ffmpeg`
+
+---
+
 ## ⚙️ yt-dlp Binary Setup
 
 This package uses the awesome [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) binary to do the heavy lifting.
@@ -97,7 +108,12 @@ Download audio (MP3) or video (MP4) to `media/audio/` or `media/videos/`. Saves 
 ```js
 const { downloadMedia } = require("simple-audio-downloader");
 
-const result = await downloadMedia("https://youtube.com/watch?v=abc123", "abc123", "Funny Cat Fails Compilation", { type: "video", quality: "720p" });
+const result = await downloadMedia(
+  "https://youtube.com/watch?v=abc123",
+  "abc123",
+  "Funny Cat Fails Compilation",
+  { type: "video", quality: "720p" },
+);
 console.log("Saved:", result.file, "Metadata:", result.metadata);
 ```
 
@@ -118,7 +134,11 @@ Download multiple videos from a single search query (e.g., "funny dog zoomies").
 ```js
 const { batchDownloadMedia } = require("simple-audio-downloader");
 
-const results = await batchDownloadMedia("funny animal fails", { maxVideos: 5, type: "video", quality: "720p" });
+const results = await batchDownloadMedia("funny animal fails", {
+  maxVideos: 5,
+  type: "video",
+  quality: "720p",
+});
 console.log("Downloaded:", results);
 ```
 
@@ -157,7 +177,10 @@ Add a download to a guild’s queue. Downloads process one-by-one, perfect for b
 ```js
 const { addToQueue } = require("simple-audio-downloader");
 
-addToQueue("guild123", videoUrl, videoId, title, { type: "video", quality: "720p" }).then((result) => {
+addToQueue("guild123", videoUrl, videoId, title, {
+  type: "video",
+  quality: "720p",
+}).then((result) => {
   console.log("Downloaded:", result.file, result.metadata);
 });
 ```
@@ -214,6 +237,7 @@ your-project/
 ## 🛠️ Requirements
 
 - Node.js v14 or higher
+- **FFmpeg** installed on your system (e.g., `apt install ffmpeg`, `brew install ffmpeg`, or `pkg install ffmpeg` in Termux)
 - `yt-dlp` binary in `yt-dlp/` folder (auto-downloads if missing)
 - Optional: `cookies.txt` for restricted content
 
