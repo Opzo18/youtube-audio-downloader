@@ -2,7 +2,28 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const ffmpegPath = "ffmpeg";
+const { execSync } = require("child_process");
+
+/**
+ * Dynamically finds the FFmpeg binary path.
+ * @returns {string} The path to FFmpeg or "ffmpeg" as fallback.
+ */
+function getFfmpegPath() {
+  try {
+    const command =
+      process.platform === "win32" ? "where ffmpeg" : "which ffmpeg";
+    const result = execSync(command, { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+    // In case 'where' returns multiple lines, take the first one
+    return result.split("\r\n")[0].split("\n")[0] || "ffmpeg";
+  } catch (e) {
+    return "ffmpeg";
+  }
+}
+
+const ffmpegPath = getFfmpegPath();
+console.log(`🎬 FFmpeg path: ${ffmpegPath}`);
 
 const YtDlpWrap = require("yt-dlp-wrap").default;
 const binary = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
