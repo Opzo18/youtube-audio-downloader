@@ -3,6 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { execSync } = require("child_process");
+const fetch = require("isomorphic-unfetch");
+const { getPreview, getTracks } = require("spotify-url-info")(fetch);
 
 /**
  * Dynamically finds the FFmpeg binary path.
@@ -146,11 +148,121 @@ function hashVideoId(videoId) {
 }
 
 // ============================
+//       SOUNDCLOUD
+// ============================
+function isSoundCloudUrl(url) {
+  return /soundcloud\.com/.test(url);
+}
+
+async function getSoundCloudInfo(url) {
+  try {
+    // Escape the URL for safety in shell command
+    const safeUrl = `"${url}"`;
+    const command = `${ytDlpPath} --dump-json --flat-playlist ${safeUrl}`;
+
+    // Limits max buffer to avoid issues with large playlists, but default 1MB is usually enough for metadata
+    const output = execSync(command, {
+      stdio: ["ignore", "pipe", "ignore"],
+      maxBuffer: 10 * 1024 * 1024,
+    }).toString();
+
+    // Output might be multiple JSON objects (one per line)
+    const lines = output.trim().split("\n");
+    const results = lines
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch (e) {
+          return null;
+        }
+      })
+      .filter((i) => i);
+
+    return results;
+  } catch (err) {
+    console.error("Failed to fetch SoundCloud info:", err.message);
+    return [];
+  }
+}
+
+// ============================
+//         SPOTIFY
+// ============================
+function isSpotifyUrl(url) {
+  return /spotify\.com/.test(url);
+}
+
+function isSpotifyPlaylist(url) {
+  return /spotify\.com\/playlist/.test(url);
+}
+
+async function getSpotifyTrackInfo(url) {
+  try {
+    const data = await getPreview(url);
+    return `${data.artist} - ${data.title}`;
+  } catch (err) {
+    console.error("Failed to fetch Spotify track:", err.message);
+    return null;
+  }
+}
+
+async function getSpotifyPlaylistTracks(url) {
+  try {
+    const tracks = await getTracks(url);
+    return tracks.map((t) => `${t.artist} - ${t.name}`);
+  } catch (err) {
+    console.error("Failed to fetch Spotify playlist:", err.message);
+    return [];
+  }
+}
+
+// ============================
 //           YT-SEARCH
 // ============================
 async function searchYouTube(query) {
   await ensureYtDlp();
-  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+
+  let searchQuery = query;
+
+  // Handle Spotify URL
+  if (isSpotifyUrl(query)) {
+    if (isSpotifyPlaylist(query)) {
+      console.warn(
+        "Spotify Playlist URL passed to searchYouTube. Use batchDownloadMedia for playlists.",
+      );
+      return [];
+    }
+    const spotifyQuery = await getSpotifyTrackInfo(query);
+    if (spotifyQuery) {
+      console.log(`🎵 Detected Spotify Link. Searching for: "${spotifyQuery}"`);
+      searchQuery = spotifyQuery + " lyrics"; // Add 'lyrics' to find official audio/lyric video
+    } else {
+      throw new Error("Could not metadata from Spotify URL");
+    }
+  }
+
+  // Handle SoundCloud URL (Direct support via yt-dlp)
+  if (isSoundCloudUrl(query)) {
+    console.log(`☁️ Detected SoundCloud Link: ${query}`);
+    const info = await getSoundCloudInfo(query);
+    if (info.length > 0) {
+      // Map SC info to our internal format
+      return info.map((track) => ({
+        title: track.title,
+        author: track.uploader || "SoundCloud",
+        thumbnail: track.thumbnail || "",
+        videoId: track.id, // SC ID
+        duration: track.duration_string || "N/A", // yt-dlp provides duration mainly in seconds usually, flat-playlist might differ
+        url: track.webpage_url || track.url || query,
+        isSoundCloud: true,
+      }));
+    } else {
+      console.warn("⚠️ No SoundCloud metadata found.");
+      return [];
+    }
+  }
+
+  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
   const response = await axios.get(url, {
     timeout: 5000,
     headers: { "User-Agent": "Mozilla/5.0" },
@@ -231,6 +343,25 @@ async function downloadMedia(videoUrl, videoId, title, options = {}) {
 
   if (fs.existsSync(cookiesPath)) args.push("--cookies", cookiesPath);
 
+  // Helper to handle Spotify URL if passed directly to downloadMedia (though unlikely if searchYouTube used first)
+  if (isSpotifyUrl(videoUrl) && !videoId) {
+    const spotifyQuery = await getSpotifyTrackInfo(videoUrl);
+    if (spotifyQuery) {
+      console.log(`🎵 Resolving Spotify Link in download: "${spotifyQuery}"`);
+      const searchResults = await searchYouTube(spotifyQuery + " audio");
+      if (searchResults.length > 0) {
+        videoUrl = searchResults[0].url;
+        videoId = searchResults[0].videoId;
+        title = searchResults[0].title;
+        // Recalculate paths with new videoId/Title
+        // Actually, best to just recursively call downloadMedia with new args
+        return downloadMedia(videoUrl, videoId, title, options);
+      } else {
+        throw new Error("Could not find YouTube video for Spotify track.");
+      }
+    }
+  }
+
   return new Promise((resolve, reject) => {
     ytdlp
       .exec(args)
@@ -255,6 +386,76 @@ async function downloadMedia(videoUrl, videoId, title, options = {}) {
 // ============================
 async function batchDownloadMedia(query, options = {}) {
   const { maxVideos = 10 } = options;
+
+  // Handle Spotify Playlist
+  if (isSpotifyUrl(query) && isSpotifyPlaylist(query)) {
+    console.log("📜 Detected Spotify Playlist. Fetching tracks...");
+    const tracks = await getSpotifyPlaylistTracks(query);
+    console.log(
+      `📜 Found ${tracks.length} tracks. Downloading top ${maxVideos}...`,
+    );
+
+    const results = [];
+    for (const trackQuery of tracks.slice(0, maxVideos)) {
+      console.log(`🔍 Processing: ${trackQuery}`);
+      try {
+        const videoResults = await searchYouTube(trackQuery + " audio");
+        if (videoResults.length > 0) {
+          const video = videoResults[0];
+          const res = await downloadMedia(
+            video.url,
+            video.videoId,
+            video.title,
+            options,
+          );
+          results.push(res);
+          console.log(`✅ Downloaded: ${video.title}`);
+        } else {
+          console.warn(`⚠️ No results for: ${trackQuery}`);
+        }
+        await new Promise((r) => setTimeout(r, 1000)); // Delay between downloads
+      } catch (err) {
+        console.error(`❌ Failed: ${trackQuery} -> ${err.message}`);
+      }
+    }
+    return results;
+  }
+
+  // Handle SoundCloud URL (Playlist or Single)
+  if (isSoundCloudUrl(query)) {
+    const info = await getSoundCloudInfo(query);
+    console.log(`☁️ SoundCloud Info fetched. Items: ${info.length}`);
+
+    const results = [];
+    const itemsToProcess = info.slice(0, maxVideos); // Respect maxVideos
+
+    for (const track of itemsToProcess) {
+      // For playlists, info contains multiple entries.
+      // For single track, it's just one.
+      // Check if it's a track-like object
+      if (track._type === "playlist") {
+        // If the URL itself was a playlist, flatten it?
+        // yt-dlp --flat-playlist on a set usually returns entries.
+        // If we got a playlist object with entries, iterate them.
+        // But flat-playlist usually returns line-delimited JSON of entries.
+      }
+
+      const title = track.title;
+      const id = track.id;
+      const url = track.webpage_url || track.url;
+
+      console.log(`⬇️ Downloading SC Track: ${title}`);
+      try {
+        const res = await downloadMedia(url, id, title, options);
+        results.push(res);
+        console.log(`✅ Downloaded: ${title}`);
+      } catch (err) {
+        console.error(`❌ Failed: ${title} -> ${err.message}`);
+      }
+    }
+    return results;
+  }
+
   const videos = await searchYouTube(query);
   if (!videos.length) return [];
 
