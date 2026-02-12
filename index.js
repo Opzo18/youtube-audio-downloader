@@ -97,18 +97,21 @@ if (!fs.existsSync(ytDlpDir)) {
 }
 
 // Download yt-dlp if binary is missing
-if (!fs.existsSync(ytDlpPath)) {
-  console.warn(
-    `yt-dlp binary not found at ${ytDlpPath}. Downloading the latest version...`,
-  );
-  (async () => {
+async function ensureYtDlp() {
+  if (!fs.existsSync(ytDlpPath)) {
+    console.warn(
+      `yt-dlp binary not found at ${ytDlpPath}. Downloading the latest version...`,
+    );
     try {
       await downloadYtDlp();
     } catch (err) {
       console.error("Failed to download yt-dlp:", err.message);
       process.exit(1);
     }
-  })();
+  }
+  if (process.platform !== "win32") {
+    fs.chmodSync(ytDlpPath, 0o755);
+  }
 }
 
 // Sanitize filename
@@ -125,6 +128,7 @@ function hashVideoId(videoId) {
 //           YT-SEARCH
 // ============================
 async function searchYouTube(query) {
+  await ensureYtDlp();
   const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
   const response = await axios.get(url, {
     timeout: 5000,
@@ -159,6 +163,7 @@ async function searchYouTube(query) {
 //           DOWNLOAD
 // ============================
 async function downloadMedia(videoUrl, videoId, title, options = {}) {
+  await ensureYtDlp();
   const { type = "video", quality = "1080p" } = options;
   const safeTitle = sanitizeFilename(title);
   const hash = hashVideoId(videoId);
@@ -321,14 +326,12 @@ async function processQueue(guildId) {
 
 function getQueue(guildId) {
   return (
-    queues
-      .get(guildId)
-      ?.queue.map((i) => ({
-        videoId: i.videoId,
-        title: i.title,
-        type: i.options.type || "video",
-        quality: i.options.quality || "1080p",
-      })) || []
+    queues.get(guildId)?.queue.map((i) => ({
+      videoId: i.videoId,
+      title: i.title,
+      type: i.options.type || "video",
+      quality: i.options.quality || "1080p",
+    })) || []
   );
 }
 
