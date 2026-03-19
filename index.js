@@ -326,7 +326,6 @@ async function downloadMedia(videoUrl, videoId, title, options = {}) {
     outputFile,
     "--no-playlist",
     "--write-info-json",
-    "--quiet",
   ];
 
   if (type === "audio")
@@ -365,6 +364,7 @@ async function downloadMedia(videoUrl, videoId, title, options = {}) {
   return new Promise((resolve, reject) => {
     ytdlp
       .exec(args)
+      .on("progress", (p) => options.onProgress?.(p))
       .on("error", reject)
       .on("close", (code) => {
         if (code !== 0)
